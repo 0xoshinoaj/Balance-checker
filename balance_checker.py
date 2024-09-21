@@ -18,13 +18,13 @@ def check_balance(rpc_url, wallet_address):
         return None
 
 def load_config():
-    config = configparser.ConfigParser()
-    config.read('config.ini')
+    config = configparser.ConfigParser(allow_no_value=True)
+    config.read('config.ini', encoding='utf-8')
     return config
 
 def main():
     config = load_config()
-    networks = [section for section in config.sections() if section != 'wallets']
+    networks = [section for section in config.sections() if section not in ['VERSION', 'wallets']]
     wallets = [address.strip() for address in config['wallets']['addresses'].split('\n') if address.strip()]
 
     for network in networks:
