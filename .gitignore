@@ -1,0 +1,69 @@
+# Python 虛擬環境
+venv/
+env/
+*.venv
+*.virtualenv
+
+# Python 編譯文件
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 配置文件（包含敏感信息）
+.env
+
+# 日誌文件
+*.log
+
+# Excel 文件（如果您不想將它們包含在版本控制中）
+*.xlsx
+*.xls
+
+# 操作系統生成的文件
+.DS_Store
+Thumbs.db
+
+# 編輯器/IDE 生成的文件
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 依賴管理文件
+pip-log.txt
+pip-delete-this-directory.txt
+
+# 單元測試 / 覆蓋率報告
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# 打包分發
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# 其他
+*.bak
+*.tmp
+*.temp
