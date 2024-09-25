@@ -1,24 +1,78 @@
 import random
 import configparser
+import asyncio
+import aiohttp
+from aiohttp_socks import ProxyConnector, ProxyType
 from web3 import Web3
 import pandas as pd
 from datetime import datetime
 import os
+import logging
 
-def check_balance(rpc_url, wallet_address):
-    web3 = Web3(Web3.HTTPProvider(rpc_url))
-    if not web3.is_connected():
-        return None
-    
-    checksum_address = web3.to_checksum_address(wallet_address)
-    
+version = "1.3.0"
+
+async def check_balance(session, rpc_url, wallet_address):
     try:
-        balance_wei = web3.eth.get_balance(checksum_address)
-        balance_eth = web3.from_wei(balance_wei, 'ether')
-        return balance_eth
+        async with session.post(rpc_url, json={
+            "jsonrpc": "2.0",
+            "method": "eth_getBalance",
+            "params": [wallet_address, "latest"],
+            "id": 1
+        }, timeout=10) as response:
+            if response.status != 200:
+                return None
+            result = await response.json()
+            if 'result' not in result:
+                return None
+            balance = int(result['result'], 16)
+            return Web3.from_wei(balance, 'ether')
+    except aiohttp.ClientError as e:
+        logging.error(f"網絡錯誤: {e}")
+    except ValueError as e:
+        logging.error(f"JSON 解析錯誤: {e}")
     except Exception as e:
-        print(f"檢查餘額時出錯: {e}")
-        return None
+        logging.error(f"未知錯誤: {e}")
+    return None
+
+async def check_balances(session, wallets, rpc_urls, network):
+    results = []
+    for wallet_name, wallet_address in wallets:
+        rpc_url = random.choice(rpc_urls)
+        balance = await check_balance(session, rpc_url, wallet_address)
+        
+        if balance is not None:
+            print(f"{wallet_name} ({wallet_address}) 的 {network} 餘額是: {balance:.8f} ETH")
+            results.append({
+                "網路": network,
+                "錢包地址": wallet_address,
+                "餘額 (ETH)": balance
+            })
+        else:
+            print(f"無法檢查 {wallet_name} ({wallet_address}) 的{network}餘額")
+        
+        await asyncio.sleep(0.2)
+    
+    return results
+
+def load_proxies(file_path):
+    proxies = []
+    try:
+        with open(file_path, 'r') as file:
+            for line in file:
+                parts = line.strip().split(':')
+                if len(parts) == 5:
+                    ip, port, user, password, proxy_type = parts
+                    proxy = {
+                        'host': ip,
+                        'port': int(port),
+                        'username': user,
+                        'password': password,
+                        'proxy_type': proxy_type.lower()
+                    }
+                    proxies.append(proxy)
+    except IOError as e:
+        logging.error(f"無法讀取代理文件: {e}")
+    return proxies
 
 def load_config():
     config = configparser.ConfigParser(allow_no_value=True)
@@ -66,11 +120,29 @@ def import_from_xlsx(filename):
         print(f"導入 Excel 文件時出錯：{e}")
         return [], []
 
-def main():
+async def create_session(proxy):
+    if proxy['proxy_type'] == 'socks5':
+        connector = ProxyConnector.from_url(
+            f"socks5://{proxy['username']}:{proxy['password']}@{proxy['host']}:{proxy['port']}"
+        )
+    else:  # http or https
+        connector = aiohttp.TCPConnector()
+        auth = aiohttp.BasicAuth(proxy['username'], proxy['password'])
+        return aiohttp.ClientSession(connector=connector, auth=auth,
+                                     proxy=f"http://{proxy['host']}:{proxy['port']}")
+    
+    return aiohttp.ClientSession(connector=connector)
+
+async def main():
     config = load_config()
     networks = [section for section in config.sections() if section not in ['VERSION', 'SETTINGS']]
     
-    # 從 Excel 文件導入錢包地址
+    proxy_file = config['SETTINGS'].get('proxy_file', 'proxy.txt')
+    proxies = load_proxies(proxy_file)
+    
+    if not proxies:
+        print("警告：沒有找到有效的代理，將不使用代理進行檢查。")
+    
     import_file = config['SETTINGS'].get('import_file', 'wallets.xlsx')
     wallets = import_from_xlsx(import_file)
     
@@ -83,31 +155,23 @@ def main():
     balance_data = []
     enabled_networks = []
 
-    for network in networks:
-        if config[network].getboolean('enabled', fallback=False):
-            enabled_networks.append(network)
-            print(f"\n檢查 {network} 網路:")
-            rpc_urls = [config[network][key] for key in config[network] if key.startswith('rpc')]
-            for i, (wallet_name, wallet_address) in enumerate(wallets, 1):
-                try:
-                    rpc_url = random.choice(rpc_urls)
-                    balance = check_balance(rpc_url, wallet_address)
-                    if balance is not None:
-                        print(f"{wallet_name} ({wallet_address}) 的餘額是: {balance:.8f} ETH")
-                        balance_data.append({
-                            "網路": network,
-                            "錢包地址": wallet_address,
-                            "餘額 (ETH)": balance
-                        })
-                    else:
-                        print(f"無法連接到 {network} 網路或檢查 {wallet_name} 的餘額")
-                except Exception as e:
-                    print(f"檢查 {wallet_name} 時發生錯誤: {e}")
-        else:
-            print(f"\n{network} 網路已禁用，跳過檢查。")
-    
+    for proxy in proxies:
+        async with await create_session(proxy) as session:
+            for network in networks:
+                if config[network].getboolean('enabled', fallback=False):
+                    enabled_networks.append(network)
+                    print(f"\n檢查 {network} 網路:")
+                    rpc_urls = [config[network][key] for key in config[network] if key.startswith('rpc')]
+                    results = await check_balances(session, wallets, rpc_urls, network)
+                    balance_data.extend(results)
+                else:
+                    print(f"\n{network} 網路已禁用，跳過檢查。")
+        
+        if balance_data:
+            break  # 如果成功获取了数据，就跳出代理循环
+
     if export_xlsx and balance_data:
         export_to_xlsx(balance_data, wallets, enabled_networks)
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

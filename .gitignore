@@ -8,3 +8,4 @@ env/
 .env
 wallets.xlsx
 proxy.txt
+balance*.xlsx
