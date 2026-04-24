@@ -1,0 +1,63 @@
+# 可自行輸入名稱
+# 是否啟用，輸入 true 或 false
+# rpc 依照順序自行填入，可以新增可以刪減，但無法留白
+[networks."Ethereum主網"]
+enabled = false
+rpc = [
+  "https://rpc.ankr.com/eth",
+  "https://1rpc.io/eth",
+]
+
+[networks."Sepolia測試網"]
+enabled = true
+rpc = [
+  "https://ethereum-sepolia-rpc.publicnode.com",
+  "https://1rpc.io/sepolia",
+]
+
+[networks."Swan Chain網"]
+enabled = true
+rpc = [
+  "https://mainnet-rpc.swanchain.org",
+  "https://mainnet-rpc-01.swanchain.org",
+  "https://mainnet-rpc-02.swanchain.org",
+]
+
+[networks."Hemi Sepolia測試網"]
+enabled = true
+rpc = [
+  "https://testnet.rpc.hemi.network/rpc",
+]
+
+[networks."Arbitrum網"]
+enabled = false
+rpc = [
+  "https://rpc.ankr.com/arbitrum",
+  "https://arbitrum.llamarpc.com",
+  "https://1rpc.io/arb",
+]
+
+[networks."Base網"]
+enabled = false
+rpc = [
+  "https://mainnet.base.org",
+  "https://base.llamarpc.com",
+  "https://1rpc.io/base",
+]
+
+[networks."Optimism網"]
+enabled = false
+rpc = [
+  "https://rpc.ankr.com/optimism",
+  "https://optimism.llamarpc.com",
+  "https://1rpc.io/op",
+]
+
+# 可依照需求，按照上面的格式自行增加更多的鏈
+[settings]
+import_file = "wallets.xlsx"
+# 是否導出 excel，輸入 true 或 false
+export_xlsx = true
+# 是否使用代理檢查，輸入 true 或 false
+use_proxy = true
+proxy_file = "proxy.txt"

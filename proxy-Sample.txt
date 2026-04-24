@@ -1,1 +1,1 @@
-ip:port:username:password:proxytype
+ip:port:username:password:proxytype(這行記得刪)

@@ -9,3 +9,4 @@ env/
 wallets.xlsx
 proxy.txt
 balance*.xlsx
+output/

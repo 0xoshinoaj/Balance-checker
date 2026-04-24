@@ -1,5 +1,4 @@
 import random
-import configparser
 import asyncio
 import aiohttp
 from aiohttp_socks import ProxyConnector, ProxyType
@@ -8,8 +7,31 @@ import pandas as pd
 from datetime import datetime
 import os
 import logging
+import shutil
 
-version = "1.3.0"
+try:
+    import tomllib
+except ModuleNotFoundError:
+    import tomli as tomllib
+
+version = "1.4.0"
+
+COLOR_RESET = "\033[0m"
+COLOR_RED = "\033[91m"
+COLOR_YELLOW = "\033[93m"
+COLOR_GREEN = "\033[92m"
+
+def color_text(text, color):
+    return f"{color}{text}{COLOR_RESET}"
+
+def print_warning(message):
+    print(color_text(message, COLOR_YELLOW))
+
+def print_error(message):
+    print(color_text(message, COLOR_RED))
+
+def print_success(message):
+    print(color_text(message, COLOR_GREEN))
 
 async def check_balance(session, rpc_url, wallet_address):
     try:
@@ -59,9 +81,16 @@ def load_proxies(file_path):
     try:
         with open(file_path, 'r') as file:
             for line in file:
-                parts = line.strip().split(':')
+                raw = line.strip()
+                if not raw or raw.startswith('#'):
+                    continue
+
+                parts = raw.split(':')
                 if len(parts) == 5:
                     ip, port, user, password, proxy_type = parts
+                    if not port.isdigit():
+                        logging.warning(f"跳過無效代理行（端口不是數字）: {raw}")
+                        continue
                     proxy = {
                         'host': ip,
                         'port': int(port),
@@ -75,9 +104,54 @@ def load_proxies(file_path):
     return proxies
 
 def load_config():
-    config = configparser.ConfigParser(allow_no_value=True)
-    config.read('config.ini', encoding='utf-8')
-    return config
+    config_path = 'config.toml'
+    try:
+        with open(config_path, 'rb') as file:
+            return tomllib.load(file)
+    except FileNotFoundError:
+        print_error(f"錯誤：找不到配置文件 {config_path}")
+    except tomllib.TOMLDecodeError as e:
+        print_error(f"錯誤：配置文件格式不正確 ({e})")
+    return None
+
+def ensure_import_file_exists(import_file, sample_file="wallets-Sample.xlsx"):
+    if os.path.exists(import_file):
+        return True
+
+    print_error(f"錯誤：找不到導入文件 {import_file}")
+    if not os.path.exists(sample_file):
+        print_error(f"錯誤：同時找不到範例檔 {sample_file}，程序將退出。")
+        return False
+
+    choice = input(f"是否使用 {sample_file} 複製為 {import_file}？(y/N): ").strip().lower()
+    if choice not in ("y", "yes"):
+        print_warning("未建立導入文件，程序將退出。")
+        return False
+
+    try:
+        shutil.copyfile(sample_file, import_file)
+        print_success(f"已建立 {import_file}。")
+        return True
+    except OSError as e:
+        print_error(f"建立導入文件失敗：{e}")
+        return False
+
+def ensure_proxy_file_exists(proxy_file, sample_file="proxy-Sample.txt"):
+    if os.path.exists(proxy_file):
+        return True
+
+    print_warning(f"警告：找不到代理文件 {proxy_file}")
+    if not os.path.exists(sample_file):
+        print_warning(f"警告：同時找不到範例檔 {sample_file}，將以不使用代理模式繼續。")
+        return False
+
+    try:
+        shutil.copyfile(sample_file, proxy_file)
+        print_success(f"已建立 {proxy_file}（請填入代理資料後再使用代理模式）。")
+        return True
+    except OSError as e:
+        print_error(f"建立代理文件失敗：{e}")
+        return False
 
 def export_to_xlsx(data, wallets, networks):
     # 創建一個字典來存儲每個錢包在每個網路的餘額
@@ -98,26 +172,29 @@ def export_to_xlsx(data, wallets, networks):
     
     # 導出到 Excel
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_dir = "output"
+    os.makedirs(output_dir, exist_ok=True)
     filename = f"balance_report_{timestamp}.xlsx"
-    df.to_excel(filename)
-    print(f"已導出報告至 {filename}")
+    output_path = os.path.join(output_dir, filename)
+    df.to_excel(output_path)
+    print_success(f"已導出報告至 {output_path}")
 
 def import_from_xlsx(filename):
     if not os.path.exists(filename):
-        print(f"錯誤：找不到文件 {filename}")
+        print_error(f"錯誤：找不到文件 {filename}")
         return [], []
 
     try:
         df = pd.read_excel(filename)
         if '錢包地址' not in df.columns:
-            print("錯誤：Excel 文件中沒有 '錢包地址' 列")
+            print_error("錯誤：Excel 文件中沒有 '錢包地址' 列")
             return [], []
         
         wallet_names = df.iloc[:, 0].tolist()  # 讀取第一列作為錢包名稱
         wallets = df['錢包地址'].tolist()
         return [(name, str(wallet).strip()) for name, wallet in zip(wallet_names, wallets) if str(wallet).strip()]
     except Exception as e:
-        print(f"導入 Excel 文件時出錯：{e}")
+        print_error(f"導入 Excel 文件時出錯：{e}")
         return [], []
 
 async def create_session(proxy):
@@ -135,39 +212,60 @@ async def create_session(proxy):
 
 async def main():
     config = load_config()
-    networks = [section for section in config.sections() if section not in ['VERSION', 'SETTINGS']]
+    if not config:
+        return
+
+    settings = config.get('settings', {})
+    network_configs = config.get('networks', {})
+    networks = list(network_configs.keys())
     
-    proxy_file = config['SETTINGS'].get('proxy_file', 'proxy.txt')
-    proxies = load_proxies(proxy_file)
+    use_proxy = bool(settings.get('use_proxy', False))
+    proxy_file = settings.get('proxy_file', 'proxy.txt')
+    if use_proxy and not ensure_proxy_file_exists(proxy_file):
+        print_warning("警告：代理文件不可用，將不使用代理進行檢查。")
+        use_proxy = False
+
+    proxies = load_proxies(proxy_file) if use_proxy else []
+    if use_proxy and not proxies:
+        print_warning("警告：沒有找到有效的代理，將不使用代理進行檢查。")
     
-    if not proxies:
-        print("警告：沒有找到有效的代理，將不使用代理進行檢查。")
-    
-    import_file = config['SETTINGS'].get('import_file', 'wallets.xlsx')
+    import_file = settings.get('import_file', 'wallets.xlsx')
+    if not ensure_import_file_exists(import_file):
+        return
     wallets = import_from_xlsx(import_file)
     
     if not wallets:
-        print("沒有找到有效的錢包地址，程序將退出。")
+        print_warning("沒有找到有效的錢包地址，程序將退出。")
         return
 
-    export_xlsx = config['SETTINGS'].getboolean('export_xlsx', fallback=False)
+    export_xlsx = bool(settings.get('export_xlsx', False))
     
     balance_data = []
     enabled_networks = []
 
-    for proxy in proxies:
-        async with await create_session(proxy) as session:
+    sessions = proxies if proxies else [None]
+    for proxy in sessions:
+        if proxy is None:
+            session_cm = aiohttp.ClientSession()
+        else:
+            session_cm = await create_session(proxy)
+
+        async with session_cm as session:
             for network in networks:
-                if config[network].getboolean('enabled', fallback=False):
+                network_config = network_configs.get(network, {})
+                if bool(network_config.get('enabled', False)):
                     enabled_networks.append(network)
                     print(f"\n檢查 {network} 網路:")
-                    rpc_urls = [config[network][key] for key in config[network] if key.startswith('rpc')]
+                    rpc_urls = network_config.get('rpc', [])
+                    if not rpc_urls:
+                        print(f"{network} 網路沒有可用 RPC，跳過檢查。")
+                        continue
                     results = await check_balances(session, wallets, rpc_urls, network)
                     balance_data.extend(results)
                 else:
                     print(f"\n{network} 網路已禁用，跳過檢查。")
         
-        if balance_data:
+        if balance_data and proxy is not None:
             break  # 如果成功获取了数据，就跳出代理循环
 
     if export_xlsx and balance_data:
