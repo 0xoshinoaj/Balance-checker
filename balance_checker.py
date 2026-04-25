@@ -8,6 +8,7 @@ from datetime import datetime
 import os
 import logging
 import shutil
+from utils.console import print_warn, print_error, print_success
 
 try:
     import tomllib
@@ -16,22 +17,8 @@ except ModuleNotFoundError:
 
 version = "1.4.0"
 
-COLOR_RESET = "\033[0m"
-COLOR_RED = "\033[91m"
-COLOR_YELLOW = "\033[93m"
-COLOR_GREEN = "\033[92m"
-
-def color_text(text, color):
-    return f"{color}{text}{COLOR_RESET}"
-
 def print_warning(message):
-    print(color_text(message, COLOR_YELLOW))
-
-def print_error(message):
-    print(color_text(message, COLOR_RED))
-
-def print_success(message):
-    print(color_text(message, COLOR_GREEN))
+    print_warn(message)
 
 async def check_balance(session, rpc_url, wallet_address):
     try:
