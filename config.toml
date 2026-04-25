@@ -4,8 +4,11 @@
 [networks."Ethereum主網"]
 enabled = false
 rpc = [
-  "https://rpc.ankr.com/eth",
+  "https://ethereum-rpc.publicnode.com",
+  "https://eth.drpc.org",
   "https://1rpc.io/eth",
+  "https://eth.blockrazor.xyz",
+  "https://rpc.fullsend.to",
 ]
 
 [networks."Sepolia測試網"]
@@ -32,8 +35,8 @@ rpc = [
 [networks."Arbitrum網"]
 enabled = false
 rpc = [
-  "https://rpc.ankr.com/arbitrum",
-  "https://arbitrum.llamarpc.com",
+  "https://arb1.arbitrum.io/rpc",
+  "https://arbitrum.drpc.org",
   "https://1rpc.io/arb",
 ]
 
@@ -48,8 +51,8 @@ rpc = [
 [networks."Optimism網"]
 enabled = false
 rpc = [
-  "https://rpc.ankr.com/optimism",
-  "https://optimism.llamarpc.com",
+  "https://mainnet.optimism.io",
+  "https://optimism.drpc.org",
   "https://1rpc.io/op",
 ]
 
